@@ -1,27 +1,12 @@
 version: '3.9'
 
 services:
-  mongodb:
-    image: mongo:latest
-    container_name: mongodb
-    restart: always
-    env_file:
-      - ".env"
-    volumes:
-      - mongodb-data:/data/db
-    ports:
-      - "27017:27017"
-    networks:
-      - app-network
-
   kuma-api:
     build: ./kuma-api
     container_name: kuma-api
     restart: always
     env_file:
       - ".env"
-    depends_on:
-      - mongodb
     ports:
       - "${API_PORT}:${API_PORT}"
     networks:
@@ -34,33 +19,10 @@ services:
     env_file:
       - ".env"
     depends_on:
-      - mongodb
       - kuma-api
     networks:
       - app-network
 
-  mongo-compass:
-    image: mongo-express
-    container_name: mongo-compass
-    restart: always
-    ports:
-      - "9000:8081"
-    env_file:
-      - ".env"
-    environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}:27017/
-      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_COMPASS_USERNAME}
-      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_COMPASS_PASSWORD}
-    networks:
-      - app-network
-    depends_on:
-      - mongodb
-
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  mongodb-data:

@@ -52,6 +52,55 @@ async def pause_monitor(data: PauseMonitorModel):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# @app.post("/add_monitor")
+# async def add_monitor(data: AddMonitorModel):
+#     """Add a monitor to Uptime Kuma."""
+#     print("data ", data)
+#     api = None
+#     try:
+#         username = os.getenv('UPTIME_KUMA_USERNAME')
+#         password = os.getenv('UPTIME_KUMA_PASSWORD')
+#         api = UptimeKumaApi(os.getenv('UPTIME_KUMA_SERVER'))
+#         api.login(username, password)
+#         name = data.name
+#         print("name adding ", name)
+#         existing_monitors = api.get_monitors()
+
+#         http_monitor_id, dns_monitor_id = None, None
+#         if not (name.startswith("PresearchNode") or name.startswith("BrokerNode")):
+#             if f"{name} - HTTP" not in (monitor['name'] for monitor in existing_monitors):
+#                 http_monitor_id = api.add_monitor(
+#                     type=MonitorType.HTTP, name=f"{name} - HTTP", url=f"https://{name}.app.runonflux.io", hostname=f"{name}.app.runonflux.io")['monitorID']
+#             if f"{name} - DNS" not in (monitor['name'] for monitor in existing_monitors):
+#                 dns_monitor_id = api.add_monitor(
+#                     type=MonitorType.DNS, name=f"{name} - DNS", url=f"https://{name}.app.runonflux.io", hostname=f"{name}.app.runonflux.io")['monitorID']
+
+#         port_monitor_ids = []
+#         if data.ips and data.ports:
+#             for port in data.ports:
+#                 for ip in data.ips:
+#                     port_monitor = api.add_monitor(
+#                         type=MonitorType.PORT, name=f"{name} - {ip}:{port}", hostname=ip, port=port)
+#                     port_monitor_ids.append(port_monitor['monitorID'])
+
+#         if data.domains:
+#             for domain in data.domains:
+#                 api.add_monitor(
+#                     type=MonitorType.HTTP, name=f"{name} - HTTP ({domain})", url=f"https://{domain}", hostname=domain)
+#                 api.add_monitor(
+#                     type=MonitorType.DNS, name=f"{name} - DNS ({domain})", hostname=domain)
+
+#         api.disconnect()
+#         return {"message": f"successfully added monitor for {name}",
+#                 "http_monitor_id": http_monitor_id,
+#                 "dns_monitor_id": dns_monitor_id,
+#                 "port_monitor_ids": port_monitor_ids}
+#     except Exception as e:
+#         print(e)
+#         if api:
+#             api.disconnect()
+#         raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/add_monitor")
 async def add_monitor(data: AddMonitorModel):
     """Add a monitor to Uptime Kuma."""
@@ -65,38 +114,71 @@ async def add_monitor(data: AddMonitorModel):
         name = data.name
         print("name adding ", name)
         existing_monitors = api.get_monitors()
-
+        # print("exisiting monitors ", existing_monitors)
         http_monitor_id, dns_monitor_id = None, None
         if not (name.startswith("PresearchNode") or name.startswith("BrokerNode")):
-            if f"{name} - HTTP" not in (monitor['name'] for monitor in existing_monitors):
-                http_monitor_id = api.add_monitor(
-                    type=MonitorType.HTTP, name=f"{name} - HTTP", url=f"https://{name}.app.runonflux.io", hostname=f"{name}.app.runonflux.io")['monitorID']
-            if f"{name} - DNS" not in (monitor['name'] for monitor in existing_monitors):
-                dns_monitor_id = api.add_monitor(
-                    type=MonitorType.DNS, name=f"{name} - DNS", url=f"https://{name}.app.runonflux.io", hostname=f"{name}.app.runonflux.io")['monitorID']
+            for monitor in existing_monitors:
+                if monitor['name'] == f"{name} - HTTP":
+                    http_monitor_id = monitor['id']
+                elif monitor['name'] == f"{name} - DNS":
+                    dns_monitor_id = monitor['id']
 
-        port_monitor_ids = []
-        if data.ips and data.ports:
-            for port in data.ports:
-                for ip in data.ips:
-                    port_monitor = api.add_monitor(
-                        type=MonitorType.PORT, name=f"{name} - {ip}:{port}", hostname=ip, port=port)
-                    port_monitor_ids.append(port_monitor['monitorID'])
+            print("http_monitor ", http_monitor_id)
+            print("dns_monitor_id ", dns_monitor_id)
+
+            if http_monitor_id is None:
+                api.add_monitor(
+                    type=MonitorType.HTTP, name=f"{name} - HTTP", url=f"https://{name}.app.runonflux.io", hostname=f"{name}.app.runonflux.io")
+
+            if dns_monitor_id is None:
+                api.add_monitor(
+                    type=MonitorType.DNS, name=f"{name} - DNS", url=f"https://{name}.app.runonflux.io", hostname=f"{name}.app.runonflux.io")
+            if data.ips and data.ports:
+                for port in data.ports:
+                    try:
+                        for ip in data.ips:
+                            for monitor in existing_monitors:
+                                if monitor['name'] == f"{name} - {ip}:{port}":
+                                    break
+                            else:
+                                print("ip:port ", name)
+                                api.add_monitor(
+                                    type=MonitorType.PORT, name=f"{name} - {ip}:{port}", hostname=ip, port=port)
+                    except Exception as e:
+                        print("tcp ", e)
+                    try:
+                        for monitor in existing_monitors:
+                            if monitor['name'] == f"{name}_{port} - DNS":
+                                break
+                        else:
+                            print(f"{name}_{port}.app.runonflux.io")
+                            api.add_monitor(
+                                type=MonitorType.DNS, name=f"{name}_{port} - DNS", url=f"https://{name}_{port}.app.runonflux.io", hostname=f"{name}_{port}.app.runonflux.io")
+                    except Exception as e:
+                        print(e)
 
         if data.domains:
             for domain in data.domains:
-                api.add_monitor(
-                    type=MonitorType.HTTP, name=f"{name} - HTTP ({domain})", url=f"https://{domain}", hostname=domain)
-                api.add_monitor(
-                    type=MonitorType.DNS, name=f"{name} - DNS ({domain})", hostname=domain)
+                for monitor in existing_monitors:
+                    if monitor['name'] == f"{name} - HTTP ({domain})":
+                        break
+                    if monitor['name'] == f"{name} - DNS ({domain})":
+                        break
+                else:
+                    try:
+                        print("adding domain monitor ", domain)
+                        api.add_monitor(
+                            type=MonitorType.HTTP, name=f"{name} - HTTP ({domain})", url=f"https://{domain}", hostname=domain)
+                        api.add_monitor(
+                            type=MonitorType.DNS, name=f"{name} - DNS ({domain})", hostname=domain)
+                    except Exception as e:
+                        print(e)
 
         api.disconnect()
-        return {"message": f"successfully added monitor for {name}",
-                "http_monitor_id": http_monitor_id,
-                "dns_monitor_id": dns_monitor_id,
-                "port_monitor_ids": port_monitor_ids}
+        return {"message": f"successfully added monitor for {name}"}
     except Exception as e:
         print(e)
+        print("error ", e)
         if api:
             api.disconnect()
         raise HTTPException(status_code=500, detail=str(e))
